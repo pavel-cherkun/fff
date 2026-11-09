@@ -1,0 +1,334 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>#FFF</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;800&family=IBM+Plex+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: one-screen game — header with scores + dex counter, last-event readout, 4×4 board, controls, collapsible color-dex (16 slices × 16×16). Single deliberate dark look: tiles are light sources in a dark room. */
+:root{
+  --bg:#000000; --panel:#0b0b0f; --cell:#0c0c11; --line:#1e1e27;
+  --fg:#ecebf3; --muted:#8a8999; --accent:#ffffff; --bad:#ff5a4e; --empty:#131319;
+  --display:"Unbounded", "Arial Black", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --gap:10px; color-scheme:dark;
+}
+[hidden]{display:none!important}
+html,body{height:100%;overflow-x:clip}
+body{background:var(--bg);color:var(--fg);font-family:var(--mono);
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+  padding-block:20px; box-sizing:border-box;
+  -webkit-user-select:none;user-select:none;overflow-x:hidden}
+.wrap{max-width:440px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-family:var(--display);font-weight:800;font-size:clamp(40px,13vw,56px);line-height:.9;margin:0;letter-spacing:-.02em;
+  color:#fff;text-shadow:-3px 0 rgba(255,0,0,.85),3px 0 rgba(0,90,255,.85),0 3px rgba(0,255,0,.6)}
+.scores{display:flex;gap:6px}
+.score{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px;min-width:56px;text-align:center;font:inherit;color:var(--fg)}
+.score small{display:block;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.score b{font-size:17px;font-variant-numeric:tabular-nums}
+button.score{cursor:pointer}
+.lead{margin:0;color:var(--muted);font-size:12.5px;line-height:1.55}
+.lead b{color:var(--fg)}
+.readout{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12.5px;flex-wrap:wrap;min-height:22px}
+.readout small{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.mix{display:flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums;flex-wrap:wrap}
+.mix.bad{color:var(--bad)}
+.mix .new{color:#000;background:var(--fg);border-radius:4px;padding:0 5px;font-size:11px}
+.chip{display:inline-flex;align-items:center;gap:5px}
+.chip i{width:12px;height:12px;border-radius:3px;background:var(--c);box-shadow:0 0 8px -1px var(--c);outline:1px solid rgba(255,255,255,.14)}
+.chip.f i{background:repeating-linear-gradient(135deg,var(--c) 0 2px,transparent 2px 4px);box-shadow:none;outline:1.5px solid var(--c)}
+.chip.s i{background:#000;box-shadow:none}
+.board{position:relative;width:100%;aspect-ratio:1;max-width:100%;background:var(--bg);border:1px solid var(--line);border-radius:4px;overflow:hidden;touch-action:none;box-sizing:border-box}
+.cell,.tile{position:absolute;top:var(--gap);left:var(--gap);width:calc((100% - 5*var(--gap))/4);height:calc((100% - 5*var(--gap))/4);border-radius:3px;
+  transform:translate(calc(var(--c)*(100% + var(--gap))),calc(var(--r)*(100% + var(--gap))))}
+.field{position:absolute;inset:0;width:100%;height:100%;z-index:0;image-rendering:auto}
+.glow{position:absolute;left:-90px;top:-90px;width:calc(100% + 180px);height:calc(100% + 180px);pointer-events:none;z-index:1;mix-blend-mode:screen}
+.tile{transition:transform 110ms ease-out;z-index:2}
+.tile .face{width:100%;height:100%;border-radius:3px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-weight:700}
+.tile.L .face{background:var(--col);color:var(--t);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18), 0 0 0 1px rgba(0,0,0,.35)}
+.tile.F .face{color:var(--col);border:2px solid var(--col);
+  background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--col) 22%,transparent) 0 6px,transparent 6px 12px),rgba(255,255,255,.03)}
+.tile.F .tag{font-size:9px;letter-spacing:.14em;text-transform:uppercase;opacity:.75}
+.tile.S .face{background:#000;color:#3a3a46;box-shadow:inset 0 0 18px 4px rgba(0,0,0,1),inset 0 0 0 1px #24242e}
+.tile .hex{font-size:clamp(15px,5.2vw,23px);letter-spacing:.02em}
+.bars{display:flex;gap:3px;height:22%;align-items:flex-end}
+.bars span{width:5px;border-radius:2px;height:var(--h);min-height:2px;background:var(--b);outline:1px solid rgba(0,0,0,.35)}
+.board.mode-hex .bars,.board.mode-none .bars,.board.mode-none .tile.L .hex,.board.mode-none .tile.S .hex{display:none}
+.tile.new .face{animation:appear 160ms ease-out both}
+.tile.pop{z-index:3}.tile.pop .face{animation:pop 180ms ease-out both}
+.tile.white .face{box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+@keyframes appear{from{transform:scale(.2);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes pop{0%{transform:scale(.8)}50%{transform:scale(1.12)}100%{transform:scale(1)}}
+.overlay{position:absolute;inset:0;border-radius:0;background:rgba(0,0,0,.82);backdrop-filter:blur(3px);z-index:10;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:20px}
+.overlay h2{font-family:var(--display);font-size:28px;margin:0}
+.overlay p{margin:0;color:var(--muted);font-size:13px;line-height:1.5;max-width:30ch}
+.controls{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;font-size:13px;font-weight:700;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px;cursor:pointer}
+button:hover{border-color:var(--muted)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.dex{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.dex h2{font-family:var(--display);font-size:18px;margin:0;display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.dex h2 span{font-family:var(--mono);font-size:13px;color:var(--muted);font-weight:500;font-variant-numeric:tabular-nums}
+.dex p{margin:0;font-size:12px;color:var(--muted);line-height:1.5}
+.dex canvas{width:100%;max-width:100%;display:block;image-rendering:pixelated}
+.meter{height:4px;background:var(--cell);border-radius:2px;overflow:hidden}
+.meter i{display:block;height:100%;background:linear-gradient(90deg,#f00,#0f0,#00f,#fff);width:var(--p)}
+details{font-size:12px;color:var(--muted);line-height:1.55}
+summary{cursor:pointer;color:var(--fg);font-weight:700}
+details p{margin:8px 0 0}
+code{color:var(--fg)}
+@media (prefers-reduced-motion:reduce){.tile{transition:none}.tile .face{animation:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>#FFF</h1>
+    <div class="scores">
+      <div class="score"><small>Свет</small><b id="score">0</b></div>
+      <div class="score"><small>Рекорд</small><b id="best">0</b></div>
+      <button class="score" id="dexBtn" aria-controls="dex"><small>Декс</small><b id="dexN">0</b></button>
+    </div>
+  </header>
+  <p class="lead">Плитки — свет, они <b>складываются физически</b>: по каналам, в линейной яркости. Пересвет за <b>F</b> не сливается. Мешают <b>фильтры</b> — полосатые стёкла, которые съедают каналы. Цель — <b>#FFF</b>.</p>
+  <div class="readout">
+    <small>Последнее</small>
+    <span class="mix" id="mix">—</span>
+  </div>
+  <div class="board" id="board" aria-label="Игровое поле">
+    <div class="overlay" id="overlay" hidden>
+      <h2 id="ovTitle"></h2><p id="ovText"></p>
+      <div class="controls" id="ovBtns"></div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="primary" id="newBtn">Новая игра</button>
+    <button id="modeBtn">Подписи: HEX</button>
+  </div>
+  <section class="dex" id="dex" hidden>
+    <h2>Колор-декс <span id="dexStat">0 / 4096</span></h2>
+    <div class="meter"><i id="dexMeter" style="--p:0%"></i></div>
+    <p>Каждый цвет, который хоть раз появился у тебя на поле, остаётся здесь навсегда. 16 срезов по красному, внутри каждого — зелёный по вертикали, синий по горизонтали.</p>
+    <canvas id="dexCv" aria-label="Карта собранных цветов"></canvas>
+  </section>
+  <details>
+    <summary>Правила целиком</summary>
+    <p><b>Свет + свет.</b> Каналы переводятся в линейную яркость и суммируются. <code>#800 + #800 = #B00</code>, а не #F00. Если хоть один канал выше 100%, плитки не сливаются.</p>
+    <p><b>Спавн грязный.</b> Выпадают не только чистые <code>#400</code>, но и смеси вроде <code>#312</code> или <code>#051</code>.</p>
+    <p><b>Фильтры</b> (полосатые стёкла). Голубой <code>−R</code>, пурпурный <code>−G</code>, жёлтый <code>−B</code>. Свет проходит через фильтр и теряет канал, фильтр расходуется. Если у света нет этого канала, фильтру нечего съесть, и плитки просто упираются друг в друга. Если от света ничего не осталось, исчезают оба. Два фильтра складываются в один, три разных дают чёрное стекло, и оба исчезают.</p>
+    <p><b>Фон</b> — это тоже свет. Каждая плитка излучает свой цвет, излучения складываются и квантуются в ту же сетку из 4096 цветов, поэтому на фоне видны ступени hex-спектра.</p>
+    <p><b>Декс.</b> Собери все 4096 цветов. Чёрный <code>#000</code> засчитывается, когда фильтр поглощает свет целиком.</p>
+    <p>Управление: свайпы, стрелки или WASD.</p>
+  </details>
+</div>
+
+<script>
+const H='0123456789ABCDEF', CH=['R','G','B'];
+const toLin=n=>{const v=n/15;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4};
+const toSrgb=L=>L<=.0031308?12.92*L:1.055*L**(1/2.4)-.055;
+const LIN=[...Array(16)].map((_,n)=>toLin(n));
+const toN=L=>Math.min(15,Math.round(toSrgb(L)*15));
+const hex=k=>k.map(n=>H[n]).join('');
+const lum=k=>.2126*LIN[k[0]]+.7152*LIN[k[1]]+.0722*LIN[k[2]];
+const textCol=k=>lum(k)>.28?'#0b0b0f':'#ffffff';
+const passHex=m=>m.map(x=>x?'0':'F').join('');
+const fLabel=m=>'−'+CH.filter((_,i)=>m[i]).join('');
+const isWhite=t=>t.t==='L'&&t.k.every(v=>v===15);
+
+function mix(a,b){const o=[];for(let i=0;i<3;i++){const s=LIN[a[i]]+LIN[b[i]];if(s>1+1e-9)return null;o.push(toN(s))}return o}
+// returns false (no interaction) or {res: spec|null, kind, gain}
+function interact(a,b){
+  const A=a.t,B=b.t;
+  if(A==='L'&&B==='L'){const m=mix(a.k,b.k);return m?{res:{t:'L',k:m},kind:'mix',gain:Math.round((LIN[m[0]]+LIN[m[1]]+LIN[m[2]])*100)}:false}
+  if(A==='F'&&B==='F'){const m=a.m.map((x,i)=>x||b.m[i]);return{res:m.every(Boolean)?null:{t:'F',m},kind:'ff'}}
+  if(A+B==='LF'||A+B==='FL'){const L=A==='L'?a:b,F=A==='F'?a:b;if(!L.k.some((v,i)=>F.m[i]&&v))return false;const k=L.k.map((v,i)=>F.m[i]?0:v);
+    return{res:k.some(v=>v)?{t:'L',k}:null,kind:'filter',L,F}}
+  if(A+B==='LS'||A+B==='SL'){const L=A==='L'?a:b;if(!L.k.includes(15))return false;
+    return{res:{t:'L',k:L.k.map(v=>toN(LIN[v]*.5))},kind:'burn',L}}
+  return false;
+}
+
+const MODES=[['hex','HEX'],['bars','HEX + каналы'],['none','без подписей']];
+const $=id=>document.getElementById(id);
+const board=$('board'), ov=$('overlay'), $mix=$('mix');
+let tiles=[], score=0, best=0, won=false, over=false, busy=false, mode=0, moves=0;
+let dex=new Uint8Array(4096), dexCount=0;
+
+const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},
+             set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+
+// Field: the board background is rendered light. Every light tile emits its color with a gaussian falloff,
+// emissions add up in linear light, and the result is quantized back to the 4096-color #RGB grid (visible hex steps).
+const field=document.createElement('canvas');field.className='field';field.setAttribute('aria-hidden','true');board.prepend(field);
+const fx=field.getContext('2d');let glowUntil=0,raf=0,img=null;
+const Q=L=>L<=0?0:Math.round(toSrgb(Math.min(1,L))*15)*17;
+function drawGlow(){
+  const br=board.getBoundingClientRect(),S=2,W=Math.max(1,Math.round(br.width/S)),Hh=Math.max(1,Math.round(br.height/S));
+  if(field.width!==W||field.height!==Hh||!img){field.width=W;field.height=Hh;img=fx.createImageData(W,Hh)}
+  const src=[];
+  for(const t of tiles){if(t.t!=='L'||!t.el)continue;const r=t.el.getBoundingClientRect();
+    src.push([(r.left-br.left+r.width/2)/S,(r.top-br.top+r.height/2)/S,LIN[t.k[0]],LIN[t.k[1]],LIN[t.k[2]]])}
+  const sig=br.width/4/S*.95,inv=1/(sig*sig),d=img.data;
+  for(let y=0;y<Hh;y++)for(let x=0;x<W;x++){let R=0,G=0,B=0;
+    for(let n=0;n<src.length;n++){const s=src[n],dx=x-s[0],dy=y-s[1],w=.6*Math.exp(-(dx*dx+dy*dy)*inv);R+=s[2]*w;G+=s[3]*w;B+=s[4]*w}
+    const i=(y*W+x)*4;d[i]=Q(R);d[i+1]=Q(G);d[i+2]=Q(B);d[i+3]=255}
+  fx.putImageData(img,0,0);
+}
+function glowLoop(){drawGlow();raf=performance.now()<glowUntil?requestAnimationFrame(glowLoop):0}
+function kick(ms=260){glowUntil=performance.now()+ms;if(!raf)raf=requestAnimationFrame(glowLoop)}
+addEventListener('resize',()=>kick(50));
+
+function makeEl(t,cls){
+  const el=document.createElement('div');
+  el.className=`tile ${t.t}`+(isWhite(t)?' white':'')+(cls?' '+cls:'');
+  let col='#000',txt='#fff',inner='';
+  if(t.t==='L'){const h=hex(t.k);col='#'+h;txt=textCol(t.k);
+    const bars=['#ff3b30','#34c759','#3a7bff'].map((b,i)=>`<span style="--h:${t.k[i]/15*100}%;--b:${b}"></span>`).join('');
+    inner=`<span class="hex">#${h}</span><span class="bars">${bars}</span>`}
+  else if(t.t==='F'){col='#'+passHex(t.m);inner=`<span class="hex">${fLabel(t.m)}</span><span class="tag">фильтр</span>`}
+  else inner=`<span class="hex">#000</span>`;
+  el.style.cssText=`--r:${t.r};--c:${t.c};--col:${col};--t:${txt}`;
+  el.innerHTML=`<div class="face">${inner}</div>`;
+  board.append(el);t.el=el;return t;
+}
+function chip(t){
+  if(t.t==='L')return `<span class="chip"><i style="--c:#${hex(t.k)}"></i>#${hex(t.k)}</span>`;
+  if(t.t==='F')return `<span class="chip f"><i style="--c:#${passHex(t.m)}"></i>${fLabel(t.m)}</span>`;
+  return `<span class="chip s"><i></i>тень</span>`;
+}
+function place(t){t.el.style.setProperty('--r',t.r);t.el.style.setProperty('--c',t.c)}
+function empties(){const occ=new Set(tiles.map(t=>t.r*4+t.c));const e=[];for(let i=0;i<16;i++)if(!occ.has(i))e.push(i);return e}
+const pick=a=>a[Math.random()*a.length|0];
+function spawnSpec(lightOnly){
+  const x=Math.random();
+  if(!lightOnly&&x<.16){const m=[0,0,0];m[Math.random()*3|0]=1;return{t:'F',m:m.map(Boolean)}}
+  const y=Math.random(),k=[0,0,0];
+  if(y<.4){k[Math.random()*3|0]=pick([4,6,8,8,10])}
+  else if(y<.8){const skip=Math.random()*3|0;for(let i=0;i<3;i++)if(i!==skip)k[i]=3+(Math.random()*9|0)}
+  else{for(let i=0;i<3;i++)k[i]=2+(Math.random()*8|0)}
+  return{t:'L',k};
+}
+function spawn(lightOnly){const e=empties();if(!e.length)return null;const i=pick(e);
+  const t=makeEl({...spawnSpec(lightOnly),r:i/4|0,c:i%4},'new');tiles.push(t);return t}
+
+// dex
+const dexIdx=t=>t.t==='L'?t.k[0]*256+t.k[1]*16+t.k[2]:t.t==='S'?0:-1;
+function collect(t){const i=dexIdx(t);if(i<0||dex[i])return false;dex[i]=1;dexCount++;return true}
+function saveDex(){let s='';for(let i=0;i<4096;i+=4)s+=H[dex[i]<<3|dex[i+1]<<2|dex[i+2]<<1|dex[i+3]];store.set('fff-dex',s)}
+function loadDex(){const s=store.get('fff-dex');if(typeof s!=='string'||s.length!==1024)return;
+  for(let j=0;j<1024;j++){const v=parseInt(s[j],16);for(let b=0;b<4;b++)dex[j*4+b]=(v>>(3-b))&1}
+  dexCount=dex.reduce((a,b)=>a+b,0)}
+function drawDex(){
+  const cv=$('dexCv'),cell=6,blk=16*cell,gap=10,lab=14,W=4*blk+3*gap,Hh=4*(blk+lab)+3*gap,dpr=window.devicePixelRatio||1;
+  cv.width=W*dpr;cv.height=Hh*dpr;cv.style.aspectRatio=`${W}/${Hh}`;
+  const x=cv.getContext('2d');x.scale(dpr,dpr);const cs=getComputedStyle(document.documentElement);
+  x.font='700 10px '+cs.getPropertyValue('--mono');
+  for(let R=0;R<16;R++){const bx=(R%4)*(blk+gap),by=(R/4|0)*(blk+lab+gap);
+    x.fillStyle=cs.getPropertyValue('--muted');x.fillText('R='+H[R],bx,by+10);
+    for(let g=0;g<16;g++)for(let b=0;b<16;b++){const i=R*256+g*16+b;
+      x.fillStyle=dex[i]?'#'+H[R]+H[g]+H[b]:cs.getPropertyValue('--empty');
+      if(dex[i]&&i===0)x.fillStyle='#000';
+      x.fillRect(bx+b*cell,by+lab+g*cell,cell-1,cell-1);
+      if(dex[i]&&i===0){x.strokeStyle='#555';x.strokeRect(bx+b*cell+.5,by+lab+g*cell+.5,cell-2,cell-2)}}}
+}
+function syncDex(){$('dexN').textContent=dexCount;$('dexStat').textContent=`${dexCount} / 4096`;
+  $('dexMeter').style.setProperty('--p',(dexCount/4096*100).toFixed(2)+'%');if(!$('dex').hidden)drawDex()}
+
+function coord(d,i,j){return d===0?[i,j]:d===1?[i,3-j]:d===2?[j,i]:[3-j,i]}
+
+function move(d){
+  if(busy||over||!ov.hidden)return;
+  const grid=Array.from({length:4},()=>Array(4).fill(null));
+  tiles.forEach(t=>grid[t.r][t.c]=t);
+  let moved=false,gain=0,ev=null,blocked=null,absorbed=false;const dead=[],born=[];
+  for(let i=0;i<4;i++){
+    const line=[];for(let j=0;j<4;j++){const [r,c]=coord(d,i,j);if(grid[r][c])line.push(grid[r][c])}
+    let pos=0,last=null;
+    for(const t of line){
+      const it=last&&interact(last,t);
+      if(it){
+        [t.r,t.c]=[last.r,last.c];dead.push(last,t);
+        if(it.res)born.push({...it.res,r:t.r,c:t.c});else pos--;
+        gain+=it.gain||0;if(it.kind==='filter'&&!it.res)absorbed=true;ev={it,a:last,b:t};last=null;moved=true;
+      }else{
+        if(last&&last.t==='L'&&t.t==='L'&&!blocked)blocked=[last,t];
+        const [r,c]=coord(d,i,pos);if(t.r!==r||t.c!==c)moved=true;
+        t.r=r;t.c=c;last=t;pos++;
+      }
+    }
+  }
+  if(!moved){if(blocked)showEvent(null,blocked,0);return}
+  busy=true;moves++;tiles.forEach(place);kick(320);
+  setTimeout(()=>{
+    dead.forEach(t=>t.el.remove());
+    tiles=tiles.filter(t=>!dead.includes(t));
+    let fresh=0;
+    born.forEach(b=>{const t=makeEl(b,'pop');tiles.push(t);if(collect(t))fresh++});if(absorbed&&collect({t:'S'}))fresh++;
+    const s=spawn();if(s&&collect(s))fresh++;
+    score+=gain;showEvent(ev,blocked,fresh);sync();busy=false;
+    if(!won&&born.some(isWhite)){won=true;show('#FFF','Чистый белый. Все три канала ровно на 100%.',[['Играть дальше',hide,1],['Заново',reset]])}
+    else if(!canMove()){over=true;show('Темнота','Ходов нет. Ярче всего горел #'+hex(brightest()),[['Ещё раз',reset,1]])}
+    save();
+  },115);
+}
+function showEvent(ev,blocked,fresh){
+  const tail=fresh?` <span class="new">+${fresh} в декс</span>`:'';
+  if(ev){const {it,a,b}=ev;$mix.className='mix';
+    if(it.kind==='mix')$mix.innerHTML=`${chip(a)}+${chip(b)}=${chip(it.res)}${tail}`;
+    else if(it.kind==='ff')$mix.innerHTML=`${chip(a)}+${chip(b)}=${it.res?chip(it.res):'чёрное стекло'}${tail}`;
+    else if(it.kind==='filter')$mix.innerHTML=`${chip(it.L)}сквозь${chip(it.F)}=${it.res?chip(it.res):'поглощён'}${tail}`;
+    else $mix.innerHTML=`${chip(it.L)}прожёг тень → ${chip(it.res)}${tail}`;
+  }else if(blocked){$mix.className='mix bad';$mix.innerHTML=`${chip(blocked[0])}+${chip(blocked[1])} пересвет${tail}`}
+  else if(fresh){$mix.className='mix';$mix.innerHTML=tail}
+}
+function canMove(){
+  if(tiles.length<16)return true;
+  const g={};tiles.forEach(t=>g[t.r*4+t.c]=t);
+  for(let r=0;r<4;r++)for(let c=0;c<4;c++){const v=g[r*4+c];
+    if(c<3&&interact(v,g[r*4+c+1]))return true;if(r<3&&interact(v,g[(r+1)*4+c]))return true}
+  return false;
+}
+const brightest=()=>tiles.filter(t=>t.t==='L').reduce((m,t)=>lum(t.k)>lum(m)?t.k:m,[0,0,0]);
+function sync(){if(score>best)best=score;$('score').textContent=score;$('best').textContent=best;syncDex();saveDex()}
+function show(title,text,btns){
+  $('ovTitle').textContent=title;$('ovText').textContent=text;
+  const box=$('ovBtns');box.innerHTML='';
+  btns.forEach(([l,f,p])=>{const b=document.createElement('button');b.textContent=l;if(p)b.className='primary';b.onclick=f;box.append(b)});
+  ov.hidden=false;
+}
+function hide(){ov.hidden=true}
+function reset(){kick(300);tiles.forEach(t=>t.el.remove());tiles=[];score=0;moves=0;won=false;over=false;hide();$mix.className='mix';$mix.textContent='—';
+  [spawn(true),spawn(true)].forEach(t=>t&&collect(t));sync();save()}
+function setMode(m){mode=m;board.className='board mode-'+MODES[m][0];$('modeBtn').textContent='Подписи: '+MODES[m][1];store.set('fff-mode',m)}
+function state(){return{tiles:tiles.map(({t,k,m,r,c})=>({t,k,m,r,c})),score,best,won,over,moves}}
+function save(){store.set('fff-game',state())}
+const valid=s=>s&&Array.isArray(s.tiles)&&s.tiles.length&&s.tiles.every(t=>t.t==='L'?Array.isArray(t.k):t.t==='F'?Array.isArray(t.m):false);
+
+function start(s){
+  loadDex();
+  if(!valid(s))s=store.get('fff-game');
+  best=Math.max(best,(s&&s.best)||0,(store.get('4096-light')||{}).best||0);
+  setMode(store.get('fff-mode')||0);
+  if(valid(s)&&!s.over){score=s.score||0;moves=s.moves||0;won=!!s.won;s.tiles.forEach(t=>tiles.push(makeEl({...t})));sync();kick(300)}
+  else reset();
+}
+
+$('newBtn').onclick=reset;
+$('modeBtn').onclick=()=>setMode((mode+1)%MODES.length);
+$('dexBtn').onclick=()=>{const d=$('dex');d.hidden=!d.hidden;if(!d.hidden){drawDex();d.scrollIntoView({behavior:'smooth',block:'start'})}};
+const KEYS={ArrowLeft:0,ArrowRight:1,ArrowUp:2,ArrowDown:3,a:0,d:1,w:2,s:3,A:0,D:1,W:2,S:3,'ф':0,'в':1,'ц':2,'ы':3};
+addEventListener('keydown',e=>{if(e.key in KEYS){e.preventDefault();move(KEYS[e.key])}});
+let sx=0,sy=0,tracking=false;
+board.addEventListener('pointerdown',e=>{sx=e.clientX;sy=e.clientY;tracking=true});
+addEventListener('pointerup',e=>{if(!tracking)return;tracking=false;
+  const dx=e.clientX-sx,dy=e.clientY-sy;if(Math.max(Math.abs(dx),Math.abs(dy))<24)return;
+  move(Math.abs(dx)>Math.abs(dy)?(dx<0?0:1):(dy<0?2:3))});
+board.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+
+window.claude?.hot?.snapshot?.(state);
+window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+</script>
+
+</body></html>
